@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bedrock Finder</title>
+<style>
+:root{--bg:#1d1f24;--panel:#2a2d34;--ink:#eceff4;--mute:#9aa3b2;--accent:#6fd3a0;--bed:#0b0b0d;--oth:#a7adb8;--line:#464b57;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Trebuchet MS",Verdana,sans-serif}
+main{max-width:480px;margin:0 auto;padding:16px}
+h1{font-size:30px;margin:6px 0}
+p{margin:0 0 12px;color:var(--mute)}
+label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
+input,select{width:100%;padding:10px;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.row{display:flex;gap:8px}.row>div{flex:1}
+#grid{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin:8px 0;touch-action:manipulation}
+#grid button{aspect-ratio:1;border:1px solid var(--line);border-radius:3px;background:transparent;padding:0;cursor:pointer}
+#grid button[data-s="1"]{background:var(--bed);border-color:#000}
+#grid button[data-s="2"]{background:var(--oth)}
+.btn{font:inherit;font-weight:700;padding:11px 16px;border:0;border-radius:6px;background:var(--panel);color:var(--ink);cursor:pointer;border:1px solid var(--line)}
+.btn.main{background:var(--accent);color:#0f2a1c;border:0;width:100%;margin-top:12px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#out{margin-top:14px}
+.hit{background:var(--panel);border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:4px solid var(--accent)}
+.hit b{font-size:18px}
+.key{font-size:14px;color:var(--mute)}
+.key i{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:4px;border:1px solid var(--line)}
+.tabs{display:flex;gap:6px;margin:10px 0}.tabs button{flex:1}.tabs .on{background:var(--accent);color:#0f2a1c;border:0}.adv{display:none}.advmode .adv{display:block}
+#prev{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}.pv{font-size:13px;color:var(--mute)}.pg{display:grid;grid-template-columns:repeat(9,1fr);gap:1px;margin-top:4px}.pg i{aspect-ratio:1;border:1px solid var(--line)}.pg i[data-s="1"]{background:var(--bed)}.pg i[data-s="2"]{background:var(--oth)}
+</style>
+</head>
+<body>
+<main>
+<h1>Bedrock Finder</h1>
+<p>Find your coordinates from the bedrock pattern. Java 1.18 or newer. You need the world seed.</p>
+<label for="seed">World seed</label>
+<input id="seed" inputmode="text" autocomplete="off" placeholder="e.g. 1234567890">
+<button class="btn" id="dsmp" style="margin-top:8px">Use DonutSMP seed</button>
+<label for="layer">Layer you are looking at</label>
+<select id="layer"></select>
+<label>Pattern, seen from above (tap to change)</label>
+<div class="key"><i></i>unknown &nbsp; <i style="background:var(--bed)"></i>bedrock &nbsp; <i style="background:var(--oth)"></i>not bedrock</div>
+<div id="grid"></div>
+<div class="row"><button class="btn" id="clr">Clear</button></div>
+<div class="row">
+<div><label for="cx">Search center X</label><input id="cx" type="number" value="0"></div>
+<div><label for="cz">Search center Z</label><input id="cz" type="number" value="0"></div>
+<div><label for="rad">Radius</label><input id="rad" type="number" value="300" min="10" max="225000"></div>
+</div>
+<button class="btn" id="dr" style="margin-top:8px">Use DonutSMP radius (450,000 x 450,000)</button>
+
+<button class="btn main" id="find">Find coordinates</button>
+<div id="out" aria-live="polite"></div>
+</main>
+<script>
+// ---- core: Minecraft 1.18+ bedrock generation ----
+const U=v=>BigInt.asUintN(64,v), rl=(v,k)=>U((v<<BigInt(k))|(v>>BigInt(64-k)));
+const mix=s=>{s=U((s^(s>>30n))*0xBF58476D1CE4E5B9n);s=U((s^(s>>27n))*0x94D049BB133111EBn);return s^(s>>31n)};
+const HASH={floor:[0xbbf7928b7bf1d285n,0xc4dc7cf90e1b3b94n],roof:[0x8ebd4a1d131d71ccn,0xc984cfbb684a26c4n]};
+function nxt(s){const l=s[0],m0=s[1],n=U(rl(U(l+m0),17)+l),m=m0^l;s[0]=U(rl(l,49)^m^(m<<21n));s[1]=rl(m,28);return n}
+function factory(seed,kind){
+  const l=seed^0x6A09E667F3BCC909n, m=U(l+0x9E3779B97F4A7C15n);
+  const s=[HASH[kind][0]^mix(U(l)),HASH[kind][1]^mix(m)];
+  return {lo:nxt(s),hi:nxt(s)};
+}
+function rnd(x,y,z,f){
+  let l=BigInt(Math.imul(x,3129871))^(BigInt(z)*116129781n)^BigInt(y);
+  l=BigInt.asIntN(64,l*l*42317861n+l*11n)>>16n;
+  const lo=U(l^f.lo);
+  return Number(U(rl(U(lo+f.hi),17)+lo)>>40n)/16777216;
+}
+// layer: {y, kind:'floor'|'roof', d}  floor: bedrock if r<d ; roof: bedrock if r>=d
+function isBed(x,z,L,f){const r=rnd(x,L.y,z,f);return L.kind==='floor'?r<L.d:r>=L.d}
+function parseSeed(t){t=t.trim();if(!t)return null;if(/^-?\d+$/.test(t))return BigInt.asIntN(64,BigInt(t));let h=0;for(const c of t)h=(Math.imul(h,31)+c.charCodeAt(0))|0;return BigInt(h)}
+function rotCW(g,N){const o=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)o[r*N+c]=g[(N-1-c)*N+r];return o}
+// ---- UI ----
+if(typeof document!=='undefined'){
+const N=9,$=id=>document.getElementById(id);
+const layers=[];
+for(let k=1;k<=4;k++)layers.push({n:'Overworld y='+(-64+k),y:-64+k,kind:'floor',d:1-k/5});
+for(let k=1;k<=4;k++)layers.push({n:'Nether floor y='+k,y:k,kind:'floor',d:1-k/5});
+for(let k=1;k<=4;k++)layers.push({n:'Nether roof y='+(122+k),y:122+k,kind:'roof',d:1-k/5});
+layers.forEach((L,i)=>{const o=document.createElement('option');o.value=i;o.textContent=L.n;$('layer').append(o)});
+$('layer').value=1;
+let g=Array(N*N).fill(0);
+const btns=[];
+for(let i=0;i<N*N;i++){const b=document.createElement('button');b.dataset.s=0;b.setAttribute('aria-label','cell '+(i+1));b.onclick=()=>{g[i]=(g[i]+1)%3;b.dataset.s=g[i]};btns.push(b);$('grid').append(b)}
+const paint=()=>btns.forEach((b,i)=>b.dataset.s=g[i]);
+$('dsmp').onclick=()=>{$('seed').value='6608149111735331168'};
+$('dr').onclick=()=>{$('rad').value=225000;$('cx').value=0;$('cz').value=0};
+$('clr').onclick=()=>{g.fill(0);paint()};
+let run=0;
+$('find').onclick=()=>{
+  const out=$('out'),seed=parseSeed($('seed').value),L=layers[+$('layer').value];
+  if(seed===null){out.textContent='Enter the world seed first.';return}
+  const known=g.filter(v=>v).length;
+  if(known<12){out.textContent='Mark at least 12 cells. More cells give a more certain match.';return}
+  const cx=Math.round(+$('cx').value),cz=Math.round(+$('cz').value),R=Math.min(225000,Math.max(10,Math.round(+$('rad').value)));
+  const f=factory(seed,L.kind),id=++run,hits=[];
+  const rots=[0,1,2,3];
+  const grids=[];let cur=g;for(let r=0;r<4;r++){grids.push(cur.map((v,i)=>[v,i]).filter(a=>a[0]).map(a=>[a[1]%N,(a[1]/N)|0,a[0]===1]));cur=rotCW(cur,N)}
+  let ri=0,x=cx-R,total=rots.length*(2*R+1),done=0;
+  const dirs=['north','east','south','west'];
+  function step(){
+    if(id!==run)return;
+    const t0=performance.now();
+    while(ri<rots.length&&performance.now()-t0<30){
+      const cells=grids[rots[ri]];
+      for(let z=cz-R;z<=cz+R;z++){
+        let ok=true;
+        for(const [c,r,b] of cells){if(isBed(x+c,z+r,L,f)!==b){ok=false;break}}
+        if(ok)hits.push({x,z,r:rots[ri]});
+      }
+      done++;x++;if(x>cx+R){x=cx-R;ri++}
+    }
+    if(ri<rots.length){out.textContent='Searching… '+Math.round(done/total*100)+'%'+(R>3000?' (large area, can take hours)':'');setTimeout(step,0);return}
+    out.innerHTML=hits.length?hits.slice(0,10).map(h=>'<div class="hit"><b>X '+h.x+', Z '+h.z+'</b><br><span class="key">North-west corner of your pattern. You were facing '+dirs[h.r]+'.</span></div>').join('')+(hits.length>10?'<p>'+hits.length+' matches. Mark more cells to narrow it down.</p>':hits.length>1?'<p>Several matches. Mark more cells to narrow it down.</p>':''):'No match in this area. Check the seed and layer, or widen the radius.';
+  }
+  step();
+};
+}
+</script>
+</body>
+</html>
